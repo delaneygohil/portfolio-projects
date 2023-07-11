@@ -1,0 +1,97 @@
+Select * 
+  from `portfolio-389123.covid_data.covid_deaths`
+  where continent is not null
+  order by 3 , 4 
+
+SELECT location, date, total_cases, new_cases, total_deaths, population
+  from `portfolio-389123.covid_data.covid_deaths`
+  order by 1,2
+
+#Looking at total cases vs. total deaths
+#shows likelihood of death by covid in Canada 
+SELECT location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 as DeathPercentage
+  from `portfolio-389123.covid_data.covid_deaths`
+  where location like '%Canada%'
+  order by date desc
+#result: as of may 31 2023, Canada has a total of 4676878 cases versus 52425 deaths, with 1.1% of the population dead from covid. 
+
+#Looking at total cases vs population
+#what percentage of Canada's population has contracted COVID-19 
+SELECT location, date, total_cases, population, (total_cases/population)*100 as PercentInfected
+  from `portfolio-389123.covid_data.covid_deaths`
+  where location like '%Canada%'and total_cases is not null
+  order by 1,2
+
+#Looking at countries with the higest infection rate in comparison to population 
+SELECT location, population, MAX(total_cases) as highestinfectioncount, MAX((total_cases/population))*100 as PercentInfected 
+  from `portfolio-389123.covid_data.covid_deaths`
+  #where location like '%Canada%'
+  group by location, population
+  order by PercentInfected desc
+#Cyprus has the highest infection rate in comparison to their population, with an infection rate of 73.8%
+
+#Showing countries with highest death count per population 
+SELECT continent, MAX(cast(total_deaths as int)) as total_death_count
+  from `portfolio-389123.covid_data.covid_deaths`
+  #where location like '%Canada%'
+  where continent is not null
+  group by continent
+  order by total_death_count desc
+#result: North America has the higest total death count, and Oceania has the least 
+
+#showing how many people have died from covid globally  
+SELECT SUM(new_cases) as total_cases, SUM(CAST(new_deaths as int)) as total_deaths, SUM(cast(new_deaths as int))/SUM(new_cases)*100 as death_percentage
+  from `portfolio-389123.covid_data.covid_deaths`
+  where continent is not null
+  order by 1,2
+#result: globally, a total of 6,944,854 people have died from covid, compared to 76,7390,932 cases 
+
+#Joining datasets
+SELECT *
+  from `portfolio-389123.covid_data.covid_deaths` dea
+  JOIN `portfolio-389123.covid_data.covid_vaccinations` vac
+    on dea.location = vac.location
+    and dea.date = vac.date
+
+#Using CTE
+WITH popvsvac (continent, location, date, population, new_vaccinations rolling_people_vaccinated) 
+as
+(
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, SUM(CAST(vac.new_vaccinations AS int)) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) as rolling_people_vaccinated 
+#(rolling_people_vaccinated/population)*100
+  from `portfolio-389123.covid_data.covid_deaths` dea
+  JOIN `portfolio-389123.covid_data.covid_vaccinations` vac
+    on dea.location = vac.location
+    and dea.date = vac.date
+  WHERE dea.continent is not null 
+  #order by 2,3 
+)
+SELECT * (rolling_people_vaccinated/population) * 100
+FROM popvsvac
+
+#Temp table
+Drop table if exists #percentpopulationvaccinated
+CREATE TABLE #percentpopulationvaccinated
+(
+  Continent nvarchar(255),
+  Location nvarchar(255),
+  date datetime,
+  Population numeric,
+  New_vaccinations numeric, 
+  rolling_people_vaccinated numeric
+)
+insert into #percentpopulationvaccinated
+WITH popvsvac (continent, location, date, population, new_vaccinations rolling_people_vaccinated) 
+as
+(
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, SUM(CAST(vac.new_vaccinations AS int)) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) as rolling_people_vaccinated 
+#(rolling_people_vaccinated/population)*100
+  from `portfolio-389123.covid_data.covid_deaths` dea
+  JOIN `portfolio-389123.covid_data.covid_vaccinations` vac
+    on dea.location = vac.location
+    and dea.date = vac.date
+  WHERE dea.continent is not null 
+  #order by 2,3 
+
+SELECT * (rolling_people_vaccinated/population) * 100
+FROM #percentpopulationvaccinated
